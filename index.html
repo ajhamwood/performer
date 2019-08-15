@@ -1,0 +1,129 @@
+<!doctype html>
+<html>
+<head>
+  <title></title>
+  <meta charset='UTF-8'>
+  <meta name='viewport' content='width=device-width, initial-scale=1'>
+  <meta name='keywords' content='Performer, benchmark'>
+  <meta name='description' content='Tabulate benchmarks run with Performer benchmarking library.'>
+  <link rel='shortcut icon' href='data:image/png;base64,'>
+  <style>
+html, body { margin: .5rem 2rem }
+h1 {
+  text-align: center;
+  font: bold italic xx-large sans }
+.table {
+  margin-bottom: 2rem;
+  max-width: 60rem }
+  .row { display: table-row }
+    .row > * {
+      display: table-cell;
+      padding: .5rem;
+      border-right: 3px solid white;
+      width: 25vw }
+    .row:first-child > div {
+      font-weight: bold;
+      text-align: center }
+    .row:nth-child(n+2) > div { text-align: right }
+    .row > div:first-child { text-align: left }
+    .row:nth-child(even) > * { background: #eee }
+    .row:nth-child(n+2) > div:nth-child(n+2)::after { content: " ops/sec" }
+@media (max-width: 800px) {
+  .table {
+    margin: 0 auto 2rem;
+    max-width: 20rem }
+    .row:first-child { display: none }
+    .row { position: relative }
+    .row, .row > * {
+      display: block;
+      width: auto }
+      .row > div:first-child { padding: .8rem 1.5rem .3rem }
+      .row > div:nth-child(n+2)::before {
+        position: absolute;
+        left: .5rem;
+        font-weight: bold;
+        content: attr(data-label) } }
+  </style>
+</head>
+<body>
+  <h1></h1>
+  <div class='table'></div>
+  <button class='run'>Run benchmark again</button>
+  <button class='abort'>Abort current benchmark</button>
+  <template id='row'><div class='row'></div></template>
+  <template id='cell'><div></div></template>
+  <script src='utils.js'></script>
+  <script src='performer.js'></script>
+  <script>
+
+var perfOpts = {throttlingRate: .5, blockDuration: 200},
+    perf = $.Performer(perfOpts),
+    app = new $.Machine({
+
+      // Table labels
+      title: 'Direct function application vs. Reflect.apply (sets of 10000)',
+      colLabels: ['fn => fn()', 'Reflect.apply'],
+      rowLabels: ['1 sec', '3 sec', '10 sec'],
+
+      // Test state
+      rowOpts: (() => {
+        let setup = () => ({ fns: Array(1e4).fill(() => 3) }),
+            test1 = function () { this.fns.map(fn => fn()) },
+            test2 = function () { this.fns.map(fn => Reflect.apply(fn, undefined, [])) };
+        return [1, 3, 10].map(x => ({ setup: [setup, setup], tests: [test1, test2], until: {seconds: x} }))
+      })()
+
+    });
+
+$.targets({
+  load () {
+
+    // Init UI
+    let { title, colLabels, rowLabels } = app.state();
+    document.title = $('h1')[0].textContent = title;
+    $.load('row', '.table');
+    $.load('cell', '.table > *');
+    colLabels.forEach(label => $.load('cell', '.table > *')[0][0].textContent = label);
+    rowLabels.forEach(label => {
+      $.load('row', '.table');
+      $.load('cell', '.table > :last-child')[0][0].textContent = label;
+      colLabels.forEach(label => $.load('cell', '.table > :last-child')[0][0].setAttribute('data-label', label))
+    });
+
+    app.emit('run')
+  },
+
+  app: { run () {
+
+    // Run benchmark
+    this.rowOpts.reduce((acc, opts, i) => acc.then(() => new Promise((resolve, reject) => {
+
+      // Performer event listeners
+      perf.onprogress = perf.onbenchmark = e =>
+        $(`.row:nth-child(${i + 2}) > div`)[e.testIndex + 1].innerText = parseFloat((e.ops / e.duration).toPrecision(4));
+
+      // Run Performer instance
+      perf.run(opts).then(console.log).then(() => perf.state().abort ? reject() : resolve())
+
+    })), Promise.resolve($('button')[0].disabled = true)).catch(() => {}).then(() => $('button')[0].disabled = false)
+
+  } }
+});
+
+$.queries ({
+
+  // Rerun benchmark
+  '.run': { click () {
+    $('.row:nth-child(n+2) > div:nth-child(n+2)').forEach(n => n.innerText = '');
+    perf = new $.Performer(perfOpts);
+    app.emit('run')
+  } },
+
+  // Abort benchmark
+  '.abort': { click () { perf.abort() } }
+
+})
+
+  </script>
+</body>
+</html>
