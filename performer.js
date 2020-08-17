@@ -38,16 +38,16 @@ $.Performer = function (opt) {
         ['times', 'seconds'].forEach(t => (t in until) && (this[t] = until[t][n] || until[t]));
 
         // Run setup
-        return new Promise(r => r(setup[n]())).catch(console.log).then(locals => {
+        return new Promise(r => r((setup[n] || (() => {}))())).catch(console.log).then(locals => {
 
           // Measurement loop
           let tot = 0;
           performance.mark('begin-all');
-          return (function throttle () {
+          return (async function throttle () {
 
             // Test loop
             performance.mark(`${n},${i},+`);
-            for (let times = 0; times < reps; times++) test.bind(locals)();
+            for (let times = 0; times < reps; times++) await test.bind(locals)();
             performance.mark(`${n},${i},-`);
             performance.measure(`${n},${i},M`, `${n},${i},+`, `${n},${i},-`)
 
